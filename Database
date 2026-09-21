@@ -1,0 +1,85 @@
+-- =====================================================================
+-- BOOK EXCHANGE - MODELO FÍSICO DE BANCO DE DADOS (PostgreSQL 15+)
+-- Projeto Integrador V - Grupo 22 - Centro Universitário Senac
+-- =====================================================================
+
+CREATE TYPE disponibilidade_livro AS ENUM ('COLECAO', 'TROCA');
+CREATE TYPE status_interesse AS ENUM ('PENDENTE', 'ACEITO', 'RECUSADO');
+CREATE TYPE status_troca AS ENUM ('EM_NEGOCIACAO', 'CONFIRMADA', 'CANCELADA', 'CONCLUIDA');
+
+-- ---------------------------------------------------------------------
+-- USUARIOS
+-- ---------------------------------------------------------------------
+CREATE TABLE usuarios (
+    id              BIGSERIAL PRIMARY KEY,
+    nome            VARCHAR(120)        NOT NULL,
+    email           VARCHAR(150)        NOT NULL UNIQUE,
+    senha_hash      VARCHAR(255)        NOT NULL,
+    cidade          VARCHAR(100),
+    criado_em       TIMESTAMP           NOT NULL DEFAULT NOW(),
+    atualizado_em   TIMESTAMP           NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------
+-- LIVROS (acervo pessoal cadastrado por cada usuário)
+-- ---------------------------------------------------------------------
+CREATE TABLE livros (
+    id                  BIGSERIAL PRIMARY KEY,
+    usuario_id          BIGINT               NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    titulo              VARCHAR(200)         NOT NULL,
+    autor               VARCHAR(150)         NOT NULL,
+    genero              VARCHAR(80)          NOT NULL,
+    estado_conservacao  VARCHAR(60)          NOT NULL,
+    disponibilidade     disponibilidade_livro NOT NULL DEFAULT 'COLECAO',
+    criado_em           TIMESTAMP            NOT NULL DEFAULT NOW(),
+    atualizado_em       TIMESTAMP            NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_livros_usuario       ON livros(usuario_id);
+CREATE INDEX idx_livros_genero        ON livros(genero);
+CREATE INDEX idx_livros_disponibilidade ON livros(disponibilidade);
+
+-- ---------------------------------------------------------------------
+-- INTERESSES ("Tenho interesse" de um usuário em um livro de outro)
+-- ---------------------------------------------------------------------
+CREATE TABLE interesses (
+    id                      BIGSERIAL PRIMARY KEY,
+    livro_id                BIGINT           NOT NULL REFERENCES livros(id) ON DELETE CASCADE,
+    usuario_interessado_id  BIGINT           NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    status                  status_interesse NOT NULL DEFAULT 'PENDENTE',
+    criado_em               TIMESTAMP        NOT NULL DEFAULT NOW(),
+    UNIQUE (livro_id, usuario_interessado_id)
+);
+
+CREATE INDEX idx_interesses_usuario ON interesses(usuario_interessado_id);
+
+-- ---------------------------------------------------------------------
+-- TROCAS (negociação/match entre dois livros de dois usuários)
+-- ---------------------------------------------------------------------
+CREATE TABLE trocas (
+    id                      BIGSERIAL PRIMARY KEY,
+    livro_ofertado_id       BIGINT       NOT NULL REFERENCES livros(id),
+    livro_solicitado_id     BIGINT       NOT NULL REFERENCES livros(id),
+    usuario_solicitante_id  BIGINT       NOT NULL REFERENCES usuarios(id),
+    usuario_dono_id         BIGINT       NOT NULL REFERENCES usuarios(id),
+    status                  status_troca NOT NULL DEFAULT 'EM_NEGOCIACAO',
+    criado_em               TIMESTAMP    NOT NULL DEFAULT NOW(),
+    concluido_em            TIMESTAMP,
+    CHECK (livro_ofertado_id <> livro_solicitado_id)
+);
+
+CREATE INDEX idx_trocas_solicitante ON trocas(usuario_solicitante_id);
+CREATE INDEX idx_trocas_dono        ON trocas(usuario_dono_id);
+CREATE INDEX idx_trocas_status      ON trocas(status);
+
+-- ---------------------------------------------------------------------
+-- Dados de exemplo (seed) - opcional, útil para demonstração/vídeo
+-- ---------------------------------------------------------------------
+INSERT INTO usuarios (nome, email, senha_hash, cidade) VALUES
+ ('Juliana Cristina', 'juliana.duarte@email.com', '$2a$10$exemplo1', 'São Paulo'),
+ ('Matheus Silva',     'matheus.silva@email.com',  '$2a$10$exemplo2', 'São Paulo');
+
+INSERT INTO livros (usuario_id, titulo, autor, genero, estado_conservacao, disponibilidade) VALUES
+ (1, 'Duna', 'Frank Herbert', 'Ficção Científica', 'Bom estado', 'COLECAO'),
+ (1, 'Orgulho e Preconceito', 'Jane Austen', 'Romance', 'Novo', 'TROCA'),
+ (2, 'A Culpa é das Estrelas', 'John Green', 'Romance', 'Bom estado', 'TROCA');
